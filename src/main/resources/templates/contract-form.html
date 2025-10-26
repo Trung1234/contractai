@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tạo Yêu Cầu Hợp Đồng Mới</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+        .container {
+            max-width: 700px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0056b3;
+            text-align: center;
+        }
+        form {
+            display: grid;
+            grid-template-columns: 1fr; /* Mobile-first */
+            gap: 20px;
+        }
+        /* For larger screens */
+        @media (min-width: 768px) {
+            form {
+                grid-template-columns: 200px 1fr;
+                align-items: center;
+            }
+            label {
+                text-align: right;
+                padding-right: 15px;
+            }
+            button {
+                grid-column: 2; /* Align button with the input fields */
+                justify-self: start;
+            }
+        }
+        label {
+            font-weight: bold;
+            color: #495057;
+        }
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box; /* Important for padding and width */
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #80bdff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0,123,255,.25);
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Tool AI Soạn Hợp Đồng</h1>
+    <h2>Nhập thông tin để tạo hợp đồng</h2>
+
+    <!--
+      - th:action: Chỉ định URL mà form sẽ gửi dữ liệu đến. @{/contracts/create} sẽ tạo ra URL đúng.
+      - th:object: Gắn form với đối tượng 'contractRequest' được gửi từ Controller.
+      - method="post": Phương thức gửi dữ liệu.
+    -->
+    <form th:action="@{/contracts/create}" th:object="${contractRequest}" method="post">
+
+        <label for="customerName">Tên khách hàng:</label>
+        <input type="text" id="customerName" th:field="*{customerName}" placeholder="Ví dụ: Công ty TNHH ABC" required>
+
+        <label for="customerAddress">Địa chỉ:</label>
+        <input type="text" id="customerAddress" th:field="*{customerAddress}" placeholder="Ví dụ: 123 Nguyễn Huệ, Q.1, TP.HCM">
+
+        <label for="productType">Loại sản phẩm:</label>
+        <select id="productType" th:field="*{productType}">
+            <option value="Phần mềm">Phần mềm</option>
+            <option value="Dịch vụ tư vấn">Dịch vụ tư vấn</option>
+            <option value="Sản phẩm vật lý">Sản phẩm vật lý</option>
+        </select>
+
+        <label for="productName">Tên sản phẩm/dịch vụ:</label>
+        <input type="text" id="productName" th:field="*{productName}" placeholder="Ví dụ: Hệ thống ERP" required>
+
+        <label for="contractValue">Giá trị hợp đồng (VNĐ):</label>
+        <input type="number" id="contractValue" th:field="*{contractValue}" placeholder="Ví dụ: 500000000" required>
+
+        <label for="paymentTerm">Điều khoản thanh toán:</label>
+        <textarea id="paymentTerm" th:field="*{paymentTerm}" rows="3" placeholder="Ví dụ: Đợt 1: 50% sau khi ký hợp đồng. Đợt 2: 50% sau khi nghiệm thu."></textarea>
+
+        <label for="contractDurationMonths">Thời hạn (tháng):</label>
+        <input type="number" id="contractDurationMonths" th:field="*{contractDurationMonths}" placeholder="Ví dụ: 12">
+
+        <button type="submit">Tạo Hợp Đồng</button>
+    </form>
+</div>
+
+</body>
+</html>
