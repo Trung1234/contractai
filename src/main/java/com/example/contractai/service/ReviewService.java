@@ -18,32 +18,29 @@ public class ReviewService {
 
     private final WebClient webClient;
 
-    @Value("${openai.api.key}")
-    private String openaiApiKey;
+    @Value("${gemini.api.key}")
+    private String geminiApiKey;
 
-    @Value("${openai.api.url}")
-    private String openaiApiUrl;
+    @Value("${gemini.api.base.url}")
+    private String geminiApiBaseUrl;
+
+    @Value("${gemini.model.name}")
+    private String geminiModelName;
 
     public ReviewService(WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder.build();
     }
 
-    /**
-     * Rà soát bản nháp hợp đồng và đưa ra các gợi ý, cảnh báo.
-     */
     public String reviewContract(String contractDraft) {
-        log.info("Bắt đầu rà soát bản nháp hợp đồng...");
+        log.info("Bắt đầu rà soát bản nháp hợp đồng bằng Gemini...");
 
         String prompt = buildReviewPrompt(contractDraft);
-        String review = callOpenAiApi(prompt);
+        String review = callGeminiApi(prompt);
 
         log.info("Đã hoàn thành rà soát hợp đồng.");
         return review;
     }
 
-    /**
-     * Xây dựng prompt chuyên biệt cho việc rà soát.
-     */
     private String buildReviewPrompt(String contractDraft) {
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("Hãy đóng vai một luật sư có kinh nghiệm. Hãy rà soát bản nháp hợp đồng dưới đây và chỉ ra các điểm sau:\n");
@@ -59,34 +56,54 @@ public class ReviewService {
     }
 
     /**
-     * Gọi API của OpenAI để thực hiện rà soát.
-     * Logic tương tự như trong LlmService nhưng với prompt khác.
+     * Gọi API của Gemini để thực hiện rà soát.
+     * Logic tương tự như trong LlmService.
      */
-    private String callOpenAiApi(String prompt) {
+    private String callGeminiApi(String prompt) {
+        String apiUrl = String.format("%s/%s:generateContent", geminiApiBaseUrl, geminiModelName);
+
         Map<String, Object> requestBody = Map.of(
-                "model", "gpt-4o-mini",
-                "messages", List.of(
-                        Map.of("role", "system", "content", "Bạn là một luật sư chuyên rà soát hợp đồng."),
-                        Map.of("role", "user", "content", prompt)
+                "contents", List.of(
+                        Map.of(
+                                "parts", List.of(
+                                        Map.of("text", prompt)
+                                )
+                        )
                 ),
-                "temperature", 0.3
+                "generationConfig", Map.of(
+                        "temperature", 0.3f,
+                        "maxOutputTokens", 1024
+                )
         );
 
         Mono<Map> responseMono = this.webClient.post()
-                .uri(openaiApiUrl)
+                .uri(uriBuilder -> uriBuilder
+                        .path(apiUrl)
+                        .queryParam("key", geminiApiKey)
+                        .build())
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", "Bearer " + openaiApiKey)
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(Map.class);
 
         Map response = responseMono.block();
-        if (response == null || response.get("choices") == null) {
+        if (response == null || response.get("candidates") == null) {
             return "Lỗi: Không thể thực hiện rà soát AI.";
         }
 
-        List<Map> choices = (List<Map>) response.get("choices");
-        Map<String, String> message = (Map<String, String>) choices.get(0).get("message");
-        return message.get("content");
+        List<Map> candidates = (List<Map>) response.get("candidates");
+        if (candidates.isEmpty()) {
+            return "Lỗi: AI không tạo được nội dung rà soát.";
+        }
+
+        Map<String, Object> candidate = candidates.get(0);
+        Map<String, Object> content = (Map<String, Object>) candidate.get("content");
+        List<Map> parts = (List<Map>) content.get("parts");
+
+        if (parts == null || parts.isEmpty()) {
+            return "Lỗi: Phản hồi rà soát từ AI không có nội dung.";
+        }
+
+        return (String) parts.get(0).get("text");
     }
 }

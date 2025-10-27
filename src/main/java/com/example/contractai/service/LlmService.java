@@ -1,8 +1,6 @@
 package com.example.contractai.service;
 
 import com.example.contractai.dto.ContractRequest;
-
-import com.example.contractai.dto.ContractRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,58 +17,37 @@ public class LlmService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmService.class);
 
-    // Sử dụng WebClient để gọi các API bên ngoài
     private final WebClient webClient;
 
-    // Lấy các giá trị cấu hình từ application.properties
-    @Value("${openai.api.key}")
-    private String openaiApiKey;
+    @Value("${gemini.api.key}")
+    private String geminiApiKey;
 
-    @Value("${openai.api.url}")
-    private String openaiApiUrl;
+    @Value("${gemini.api.base.url}")
+    private String geminiApiBaseUrl;
 
-//    @Value("${pinecone.api.key}")
-//    private String pineconeApiKey;
-//
-//    @Value("${pinecone.index.host}") // Ví dụ: https://index-name-xxx.svc.aped-4627.pinecone.io
-//    private String pineconeIndexHost;
+    @Value("${gemini.model.name}")
+    private String geminiModelName;
 
     public LlmService(WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder.build();
     }
 
-    /**
-     * Phương thức chính để tạo bản nháp hợp đồng.
-     * Triển khai luồng RAG (Retrieve-Augment-Generate).
-     */
     public String generateContractDraft(ContractRequest request) {
-        log.info("Bắt đầu tạo hợp đồng cho sản phẩm: {}", request.getProductName());
+        log.info("Bắt đầu tạo hợp đồng cho sản phẩm: {} bằng Gemini", request.getProductName());
 
-        // --- BƯỚC 1: RETRIEVE ---
-        // Trong một ứng dụng thực tế, bạn sẽ tạo embedding cho query và gọi Pinecone.
-        // Để đơn giản cho MVP, chúng ta sẽ giả lập việc lấy context.
-        // TODO: Triển khai logic gọi Pinecone API ở đây.
         List<String> relevantContext = retrieveRelevantContext(request.getProductName());
         log.info("Đã lấy được {} đoạn context liên quan.", relevantContext.size());
 
-        // --- BƯỚC 2: AUGMENT ---
         String prompt = buildPrompt(request, relevantContext);
         log.info("Đã xây dựng prompt hoàn chỉnh.");
 
-        // --- BƯỚC 3: GENERATE ---
-        String contractDraft = callOpenAiApi(prompt);
+        String contractDraft = callGeminiApi(prompt);
         log.info("Đã tạo xong bản nháp hợp đồng.");
 
         return contractDraft;
     }
 
-    /**
-     * Giả lập việc truy xuất dữ liệu từ Vector DB.
-     * Trong thực tế, method này sẽ gọi API của Pinecone/Weaviate.
-     */
     private List<String> retrieveRelevantContext(String productName) {
-        // Đây là dữ liệu giả lập (mock data)
-        // Bạn sẽ thay thế bằng logic gọi API thực tế
         log.warn("Đang sử dụng dữ liệu context giả lập. Cần triển khai Pinecone API.");
         return List.of(
                 "Điều 1: Đối tượng hợp đồng. Bên A đồng ý cung cấp cho Bên B giải pháp phần mềm tên là [Tên sản phẩm].",
@@ -79,9 +56,6 @@ public class LlmService {
         );
     }
 
-    /**
-     * Xây dựng prompt hoàn chỉnh để gửi đến LLM.
-     */
     private String buildPrompt(ContractRequest request, List<String> context) {
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("Bạn là một chuyên gia pháp lý. Dựa vào thông tin và các mẫu hợp đồng tham khảo dưới đây, hãy soạn thảo một bản hợp đồng hoàn chỉnh, chuyên nghiệp.\n\n");
@@ -102,37 +76,56 @@ public class LlmService {
     }
 
     /**
-     * Gọi API Chat Completions của OpenAI để tạo nội dung.
+     * Gọi API generateContent của Google Gemini để tạo nội dung.
      */
-    private String callOpenAiApi(String prompt) {
-        // Sử dụng helper để gọi API với retry logic
-        return ApiCallHelper.callWithRetry(() -> {
-            // Đây là cuộc gọi API thực tế, được bọc trong một lambda
-            Map<String, Object> requestBody = Map.of(
-                    "model", "gpt-4o-mini",
-                    "messages", List.of(
-                            Map.of("role", "system", "content", "Bạn là một chuyên gia soạn thảo hợp đồng."),
-                            Map.of("role", "user", "content", prompt)
-                    ),
-                    "temperature", 0.2
-            );
+    private String callGeminiApi(String prompt) {
+        // Xây dựng URL đầy đủ, bao gồm model name và endpoint
+        String apiUrl = String.format("%s/%s:generateContent", geminiApiBaseUrl, geminiModelName);
 
-            Map response = this.webClient.post()
-                    .uri(openaiApiUrl)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + openaiApiKey)
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block(); // block() để chờ kết quả
+        // Xây dựng request body theo định dạng của Gemini
+        Map<String, Object> requestBody = Map.of(
+                "contents", List.of(
+                        Map.of(
+                                "parts", List.of(
+                                        Map.of("text", prompt)
+                                )
+                        )
+                ),
+                "generationConfig", Map.of(
+                        "temperature", 0.2f,
+                        "maxOutputTokens", 2048
+                )
+        );
 
-            if (response == null || response.get("choices") == null) {
-                throw new RuntimeException("Lỗi: Không nhận được phản hồi hợp lệ từ AI.");
-            }
+        // Gọi API và xử lý phản hồi
+        Mono<Map> responseMono = this.webClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path(apiUrl) // Sử dụng URL đã xây dựng
+                        .queryParam("key", geminiApiKey) // Thêm API key vào query parameter
+                        .build())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class);
 
-            List<Map> choices = (List<Map>) response.get("choices");
-            Map<String, String> message = (Map<String, String>) choices.get(0).get("message");
-            return message.get("content");
-        }, 3, 2000); // Thử lại tối đa 3 lần, đợi ban đầu 2 giây
+        Map response = responseMono.block();
+        if (response == null || response.get("candidates") == null) {
+            return "Lỗi: Không nhận được phản hồi từ AI.";
+        }
+
+        List<Map> candidates = (List<Map>) response.get("candidates");
+        if (candidates.isEmpty()) {
+            return "Lỗi: AI không tạo được nội dung.";
+        }
+
+        Map<String, Object> candidate = candidates.get(0);
+        Map<String, Object> content = (Map<String, Object>) candidate.get("content");
+        List<Map> parts = (List<Map>) content.get("parts");
+
+        if (parts == null || parts.isEmpty()) {
+            return "Lỗi: Phản hồi từ AI không có nội dung.";
+        }
+
+        return (String) parts.get(0).get("text");
     }
 }
